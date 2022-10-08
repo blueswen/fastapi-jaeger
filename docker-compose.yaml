@@ -28,7 +28,7 @@ services:
       AGENT_PORT: 6831
 
   jaeger-agent:
-    image: jaegertracing/jaeger-agent
+    image: jaegertracing/jaeger-agent:1.38.1
     command: 
       - "--reporter.grpc.host-port=jaeger-collector:14250"
     ports:
@@ -41,7 +41,7 @@ services:
       - jaeger-collector
 
   jaeger-collector:
-    image: jaegertracing/jaeger-collector
+    image: jaegertracing/jaeger-collector:1.38.1
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -63,12 +63,12 @@ services:
     image: cassandra:4.0
 
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema
+    image: jaegertracing/jaeger-cassandra-schema:1.38.1
     depends_on:
       - cassandra
 
   jaeger-query:
-    image: jaegertracing/jaeger-query
+    image: jaegertracing/jaeger-query:1.38.1
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
