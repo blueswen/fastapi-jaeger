@@ -2,30 +2,30 @@
 
 Trace FastAPI with [Jaeger](https://www.jaegertracing.io/) through [OpenTelemetry Python API and SDK](https://github.com/open-telemetry/opentelemetry-python).
 
-Span from application could be collected with [Jaeger Collector](https://www.jaegertracing.io/docs/1.33/architecture/#collector) or [Jaeger Agent](https://www.jaegertracing.io/docs/1.33/architecture/#agent):
+The span from the application could be collected with [Jaeger Collector](https://www.jaegertracing.io/docs/1.33/architecture/#collector) or [Jaeger Agent](https://www.jaegertracing.io/docs/1.33/architecture/#agent):
 
 ![Demo Project Architecture](./images/demo-arch.jpg)
 
-There are three way to push span:
+There are three ways to push span:
 
-- A: Push span to agent with Thrift format over UDP (Port: 6831)
+- A: Push span to the agent with Thrift format over UDP (Port: 6831)
 - B: Push span to collector with Thrift format over HTTP (Port: 14268)
 - C: Push span to collector over gRPC (Port: 14250)
 
-In this architecture, Jaeger Collector is responsible for collect span and write span to DB, then Jaeger Query queries data from DB.
+In this architecture, Jaeger Collector is responsible for collecting span and writing span to DB, then Jaeger Query queries data from DB.
 
 ## Quick Start
 
-1. Build application image and start all service with docker-compose
+1. Build application image and start all services with docker-compose
 
    ```bash
    docker-compose build
    docker-compose up -d
    ```
 
-   It may take some time for DB(Cassandra) initializing.
+   It may take some time for DB(Cassandra) to initialize. You can run `docker-compose ps` to check the `jaeger-query` status is running when DB is ready.
 
-2. Send requests with ```curl``` to FastAPI application
+2. Send requests with `curl` to the FastAPI application
 
    ```bash
    curl http://localhost:8000/chain
@@ -43,11 +43,11 @@ In this architecture, Jaeger Collector is responsible for collect span and write
 
 ### FastAPI Application
 
-For more complex scenario, we use three FastAPI applications with same code in this demo. There is a cross service action in ```/chain``` endpoint, which provides a good example for how to use OpenTelemetry SDK process span and how Jaeger Query presents trace information.
+For a more complex scenario, we use three FastAPI applications with the same code in this demo. There is a cross-service action in `/chain` endpoint, which provides a good example of how to use OpenTelemetry SDK process span and how Jaeger Query presents trace information.
 
 #### Traces and Logs
 
-Utilize [OpenTelemetry Python SDK](https://github.com/open-telemetry/opentelemetry-python) to send span to Jaeger. Each request span contains other child spans when using OpenTelemetry instrumentation. The reason is that instrumentation will catch each internal asgi interaction ([opentelemetry-python-contrib issue #831](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/831#issuecomment-1005163018)). If you want to get rid of the internal spans, there is a [workaround](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/831#issuecomment-1116225314) in the same issue #831 through using a new OpenTelemetry middleware with two overridden method about span processing.
+Utilize [OpenTelemetry Python SDK](https://github.com/open-telemetry/opentelemetry-python) to send span to Jaeger. Each request span contains other child spans when using OpenTelemetry instrumentation. The reason is that instrumentation will catch each internal asgi interaction ([opentelemetry-python-contrib issue #831](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/831#issuecomment-1005163018)). If you want to get rid of the internal spans, there is a [workaround](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/831#issuecomment-1116225314) in the same issue #831 by using a new OpenTelemetry middleware with two overridden methods of span processing.
 
 Utilize [OpenTelemetry Logging Instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/logging/logging.html) override logger format which with trace id and span id.
 
@@ -104,7 +104,7 @@ def setting_jaeger(app: ASGIApp, app_name: str, log_correlation: bool = True) ->
 
 #### Span Inject
 
-If we want other services ues the same Trace ID, we have to use ```inject``` function to add current span information to header. Because OpenTelemetry FastAPI instrumentation only takes care the asgi app's request and response, it does not affect any other modules or actions like send http request to other server or function calls.
+If we want other services to use the same Trace ID, we have to use `inject` function to add current span information to the header. Because OpenTelemetry FastAPI instrumentation only takes care of the asgi app's request and response, it does not affect any other modules or actions like sending HTTP requests to other servers or function calls.
 
 ```py
 # fastapi_app/main.py
@@ -193,7 +193,7 @@ Check more details on Jaeger docs [Deployment about Collector](https://www.jaege
 
 #### Storage
 
-All traces collected by Jaeger Collector will be validated, indexed and then stored in storage. Jaeger supports multiple span storage backend:
+All traces collected by Jaeger Collector will be validated, indexed, and then stored in storage. Jaeger supports multiple span storage backends:
 
 1. Cassandra 3.4+
 2. Elasticsearch 5.x, 6.x, 7.x
@@ -201,7 +201,7 @@ All traces collected by Jaeger Collector will be validated, indexed and then sto
 4. memory storage
 5. Storage plugin
 
-In this demo we use Cassandra as storage backend.
+In this demo, we use Cassandra as the storage backend.
 
 ```yaml
 # docker-compose.yaml
@@ -240,6 +240,174 @@ services:
 ```
 
 Check more details on Jaeger docs [Deployment about Query Service & UI](https://www.jaegertracing.io/docs/1.33/deployment/#query-service--ui).
+
+## With Grafana and Loki
+
+Only viewing the trace information on Jaeger UI may not be good enough. How about also tracing with logs at the same time? [Grafana](https://github.com/grafana/grafana) started supporting [Jaeger data source](https://grafana.com/docs/grafana/latest/datasources/jaeger/) since Grafana 7.4+, and also provides a good log aggregation system [Loki](https://github.com/grafana/loki/). Grafana provides a great user experience tracing information across logs and traces.
+
+![Demo Project Architecture with Loki and Grafana](./images/demo-arch-grafana.jpg)
+
+### Quick Start
+
+1. Install [Loki Docker Driver](https://grafana.com/docs/loki/latest/clients/docker-driver/)
+
+   ```bash
+   docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+   ```
+
+2. Build application image and start all services with docker-compose
+
+   ```bash
+   docker-compose build
+   docker-compose up -d
+   ```
+
+   It may take some time for DB(Cassandra) to initialize.
+
+3. Send requests with `curl` to the FastAPI application
+
+   ```bash
+   curl http://localhost:8000/chain
+   ```
+
+4. Explore the collected span on Grafana [http://localhost:3000/](http://localhost:3000/)
+
+   Grafana Explore screenshot:
+
+   ![Explore Jaeger on Grafana](./images/explore-jaeger.png)
+
+### Explore with Grafana
+
+#### Traces to Logs
+
+Get Trace ID and tags (here is `compose.service` mapping to `compose_service`) defined in Jaeger data source from span, then query with Loki.
+
+![Traces to Logs](./images/traces-to-logs.png)
+
+#### Logs to Traces
+
+Get Trace ID pared from log (regex defined in Loki data source), then query in Jaeger.
+
+![Logs to Traces](./images/logs-to-traces.png)
+
+### Detail
+
+#### Jaeger - Traces
+
+Receives spans from applications.
+
+##### Grafana Data Source
+
+[Trace to logs](https://grafana.com/docs/grafana/latest/datasources/jaeger/#trace-to-logs) setting:
+
+1. Data source: target log source
+2. Tags: key of tags or process level attributes from the trace, which will be log query criteria if the key exists in the trace
+3. Map tag names: Convert existing key of tags or process level attributes from trace to another key, then used as log query criterial. Use this feature when the values of the trace tag and log label are identical but the keys are different.
+
+Grafana data source setting example:
+
+![Data Source of Jaeger: Trace to logs](./images/jaeger-trace-to-logs.png)
+
+Grafana data sources config example:
+
+```yaml
+name: Jaeger
+type: jaeger
+typeName: Jaeger
+access: proxy
+url: http://jaeger-query:16686
+user: ''
+database: ''
+basicAuth: false
+isDefault: false
+jsonData:
+  nodeGraph:
+    enabled: true
+  tracesToLogs:
+    datasourceUid: loki
+    filterBySpanID: false
+    filterByTraceID: true
+    mapTagNamesEnabled: true
+    mappedTags:
+      - key: service.name
+        value: compose_service
+```
+
+#### Loki - Logs
+
+Collects logs with Loki Docker Driver from applications.
+
+##### Loki Docker Driver
+
+1. Use [YAML anchor and alias](https://support.atlassian.com/bitbucket-cloud/docs/yaml-anchors/) feature to set logging options for each service.
+2. Set [Loki Docker Driver options](https://grafana.com/docs/loki/latest/clients/docker-driver/configuration/)
+   1. loki-url: loki service endpoint
+   2. loki-pipeline-stages: processes multiline log from FastAPI application with multiline and regex stages ([reference](https://grafana.com/docs/loki/latest/clients/promtail/stages/multiline/))
+
+```yaml
+x-logging: &default-logging # anchor(&): 'default-logging' for defines a chunk of configuration
+  driver: loki
+  options:
+    loki-url: 'http://localhost:3100/api/prom/push'
+    loki-pipeline-stages: |
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2}'
+          max_wait_time: 3s
+      - regex:
+          expression: '^(?P<time>\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2},d{3}) (?P<message>(?s:.*))$$'
+# Use $$ (double-dollar sign) when your configuration needs a literal dollar sign.
+
+version: "3.4"
+
+services:
+   foo:
+      image: foo
+      logging: *default-logging # alias(*): refer to 'default-logging' chunk 
+```
+
+##### Grafana Data Source
+
+Add a TraceID derived field to extract the trace id and create a Jaeger link from the trace id.
+
+Grafana data source setting example:
+
+![Data Source of Loki: Derived fields](./images/loki-derive-filed.png)
+
+Grafana data source config example:
+
+```yaml
+name: Loki
+type: loki
+typeName: Loki
+access: proxy
+url: http://loki:3100
+password: ''
+user: ''
+database: ''
+basicAuth: false
+isDefault: false
+jsonData:
+derivedFields:
+   - datasourceUid: jaeger
+      matcherRegex: (?:trace_id)=(\w+)
+      name: TraceID
+      url: $${__value.raw}
+      # Use $$ (double-dollar sign) when your configuration needs a literal dollar sign.
+readOnly: false
+editable: true
+```
+
+#### Grafana
+
+1. Add Jaeger, and Loki to the data source with config file ```etc/grafana/datasource.yml```.
+
+```yaml
+# grafana in docker-compose.yaml
+grafana:
+   image: grafana/grafana:9.1.7
+   volumes:
+      - ./etc/grafana/:/etc/grafana/provisioning/datasources # data sources
+```
 
 # Reference
 
