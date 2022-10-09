@@ -9,6 +9,7 @@ services:
       APP_NAME: "app-a"
       MODE: "grpc"
       COLLECTOR_ENDPOINT_GRPC_ENDPOINT: "jaeger-collector:14250"
+  
   app-b:
     build: ./fastapi_app/
     ports:
@@ -17,6 +18,7 @@ services:
       APP_NAME: "app-b"
       MODE: "thrift-collector"
       COLLECTOR_THRIFT_URL: "http://jaeger-collector:14268"
+  
   app-c:
     build: ./fastapi_app/
     ports:
