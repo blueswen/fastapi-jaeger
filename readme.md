@@ -2,17 +2,55 @@
 
 Trace FastAPI with [Jaeger](https://www.jaegertracing.io/) through [OpenTelemetry Python API and SDK](https://github.com/open-telemetry/opentelemetry-python).
 
-The span from the application could be collected with [Jaeger Collector](https://www.jaegertracing.io/docs/1.33/architecture/#collector) or [Jaeger Agent](https://www.jaegertracing.io/docs/1.33/architecture/#agent):
+The span from the application could be collected with [Jaeger Collector](https://www.jaegertracing.io/docs/1.47/architecture/#collector)(jaeger-collector) or [OpenTelemetry Collector](https://www.jaegertracing.io/docs/1.47/architecture/#with-opentelemetry)(otel-collector):
 
 ![Demo Project Architecture](./images/demo-arch.jpg)
 
-There are three ways to push span:
+There are four ways to push span:
 
-- A: Push span to the agent with Thrift format over UDP (Port: 6831)
-- B: Push span to collector with Thrift format over HTTP (Port: 14268)
-- C: Push span to collector over gRPC (Port: 14250)
+- A: Push span to OpenTelemetry Collector with gRPC (Port: 4317)
+- B: Push span to OpenTelemetry Collector over HTTP (Port: 4318)
+- C: Push span to Jaeger Collector with gRPC (Port: 4317)
+- D: Push span to Jaeger Collector with gRPC (Port: 4318)
 
-In this architecture, Jaeger Collector is responsible for collecting span and writing span to DB, then Jaeger Query queries data from DB.
+In this architecture, OpenTelemetry Collector is an agent to collect and process data and sent data to Jaeger Collector. Jaeger Collector is responsible for collecting span and writing span to DB, then Jaeger Query queries data from DB.
+
+Jaeger Agent has been deprecated since version 1.43. Since version 1.43, OpenTelemetry SDK allows direct data transmission to Jaeger Collector or utilization of OpenTelemetry Collector as an Agent. If you still want to utilize Jaeger Agent for span collection, please refer to the previous version of this [project](https://github.com/blueswen/fastapi-jaeger/tree/jaeger-agent).
+
+## Table of contents
+
+- [FastAPI Tracing with Jaeger through OpenTelemetry](#fastapi-tracing-with-jaeger-through-opentelemetry)
+  - [Table of contents](#table-of-contents)
+  - [Quick Start](#quick-start)
+  - [Detail](#detail)
+    - [FastAPI Application](#fastapi-application)
+      - [Traces and Logs](#traces-and-logs)
+      - [Span Inject](#span-inject)
+    - [Jaeger](#jaeger)
+      - [Jaeger Collector](#jaeger-collector)
+      - [OpenTelemetry Collector](#opentelemetry-collector)
+      - [Storage](#storage)
+      - [Jaeger Query](#jaeger-query)
+  - [With Service Performance Monitoring](#with-service-performance-monitoring)
+    - [Quick Start](#quick-start-1)
+    - [Details](#details)
+      - [OpenTelemetry Collector](#opentelemetry-collector-1)
+      - [Prometheus](#prometheus)
+      - [Jaeger Query](#jaeger-query-1)
+  - [With Grafana and Loki](#with-grafana-and-loki)
+    - [Quick Start](#quick-start-2)
+    - [Explore with Grafana](#explore-with-grafana)
+      - [Traces to Logs](#traces-to-logs)
+      - [Logs to Traces](#logs-to-traces)
+    - [Detail](#detail-1)
+      - [Jaeger - Traces](#jaeger---traces)
+        - [Grafana Data Source](#grafana-data-source)
+      - [Loki - Logs](#loki---logs)
+        - [Loki Docker Driver](#loki-docker-driver)
+        - [Grafana Data Source](#grafana-data-source-1)
+      - [Grafana](#grafana)
+- [Reference](#reference)
+
 
 ## Quick Start
 
@@ -54,46 +92,52 @@ Utilize [OpenTelemetry Logging Instrumentation](https://opentelemetry-python-con
 ```py
 # fastapi_app/main.py
 
-# grpc, thrift-collector,  thrift-agent
-MODE = os.environ.get("MODE", "grpc")
+# jaeger-grpc, jaeger-http, otel-collector-grpc, otel-collector-http
+MODE = os.environ.get("MODE", "otel-collector-grpc")
 
-# with grpc through jaeger collector
-COLLECTOR_ENDPOINT_GRPC_ENDPOINT = os.environ.get(
-    "COLLECTOR_ENDPOINT_GRPC_ENDPOINT", "jaeger-collector:14250")
-
-# with thrift through jaeger collector
-COLLECTOR_THRIFT_URL = os.environ.get(
-    "COLLECTOR_THRIFT_URL", "http://jaeger-collector:14268")
-
-# with thrift through jaeger agent
-AGENT_HOST_NAME = os.environ.get("AGENT_HOST_NAME", "jaeger-agent")
-AGENT_PORT = int(os.environ.get("AGENT_PORT", 6831))
+JAEGER_GRPC_ENDPOINT = os.environ.get("JAEGER_GRPC_ENDPOINT", "jaeger-collector:4317")
+JAEGER_HTTP_ENDPOINT = os.environ.get(
+    "JAEGER_HTTP_ENDPOINT", "http://jaeger-collector:4318/v1/traces"
+)
+OTEL_GRPC_ENDPOINT = os.environ.get("OTEL_GRPC_ENDPOINT", "otel-collector:4317")
+OTEL_HTTP_ENDPOINT = os.environ.get(
+    "OTEL_HTTP_ENDPOINT", "http://otel-collector:4318/v1/traces"
+)
 
 def setting_jaeger(app: ASGIApp, app_name: str, log_correlation: bool = True) -> None:
-    # Setting jaeger
-    # set the service name to show in traces
-    resource = Resource.create(attributes={
-        "service.name": app_name
-    })
+    resource = Resource.create(attributes={"service.name": app_name})
 
     # set the tracer provider
     tracer = TracerProvider(resource=resource)
     trace.set_tracer_provider(tracer)
 
-    # use different mode to push span according environment variable MODE
-    if MODE == "thrift-collector":
-        tracer.add_span_processor(BatchSpanProcessor(ThriftJaegerExporter(
-            collector_endpoint=f'{COLLECTOR_THRIFT_URL}/api/traces?format=jaeger.thrift',
-        )))
-    elif MODE == "thrift-agent":
-        tracer.add_span_processor(BatchSpanProcessor(ThriftJaegerExporter(
-            agent_host_name=AGENT_HOST_NAME,
-            agent_port=AGENT_PORT,
-        )))
+    if MODE == "jaeger-grpc":
+        tracer.add_span_processor(
+            BatchSpanProcessor(
+                OTLPSpanExporterGRPC(endpoint=JAEGER_GRPC_ENDPOINT, insecure=True)
+            )
+        )
+    elif MODE == "jaeger-http":
+        tracer.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=JAEGER_HTTP_ENDPOINT))
+        )
+    elif MODE == "otel-collector-grpc":
+        tracer.add_span_processor(
+            BatchSpanProcessor(
+                OTLPSpanExporterGRPC(endpoint=OTEL_GRPC_ENDPOINT, insecure=True)
+            )
+        )
+    elif MODE == "otel-collector-http":
+        tracer.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=OTEL_HTTP_ENDPOINT))
+        )
     else:
-        # grpc (default)
-        tracer.add_span_processor(BatchSpanProcessor(GrpcJaegerExporter(
-            collector_endpoint=COLLECTOR_ENDPOINT_GRPC_ENDPOINT, insecure=True)))
+        # default otel-collector-grpc
+        tracer.add_span_processor(
+            BatchSpanProcessor(
+                OTLPSpanExporterGRPC(endpoint=OTEL_GRPC_ENDPOINT, insecure=True)
+            )
+        )
 
     # override logger format which with trace id and span id
     if log_correlation:
@@ -131,65 +175,105 @@ async def chain(response: Response):
 
 There is an [all-in-one](https://www.jaegertracing.io/docs/1.33/getting-started/#all-in-one) Jaeger for quick testing, but in production running Jaeger backend components as a scalable distributed system is the most common method, as illustrated below.
 
-![Jaeger Architecture](./images/jaeger-architecture-v1.png)
+![Jaeger Architecture](./images/architecture-v1-2023.png)
 
-Image Source: [Jaeger](https://www.jaegertracing.io/docs/1.33/architecture/#components)
+Image Source: [Jaeger](https://www.jaegertracing.io/docs/1.47/architecture/#direct-to-storage)
 
-We use the [docker compose example](https://github.com/jaegertracing/jaeger/blob/main/docker-compose/jaeger-docker-compose.yml) from Jaeger official repository as this demo's Jaeger backend.
+Or with OpenTelemetry Collector:
 
-Check more details on [Jaeger docs about architecture](https://www.jaegertracing.io/docs/1.33/architecture/).
+![Jaeger Architecture with OpenTelemetry Collector](./images/architecture-otel.png)
 
-#### Jaeger Agent
+Image Source: [Jaeger](https://www.jaegertracing.io/docs/1.47/architecture/#with-opentelemetry)
 
-The Jaeger agent is a network daemon that listens for spans sent over UDP, which it batches and sends to the collector.
+We create the Jaeger backend of this demo project based on the [docker compose example](https://github.com/jaegertracing/jaeger/blob/main/docker-compose/jaeger-docker-compose.yml) from Jaeger's official repository.
 
-```yaml
-# docker-compose.yaml
-services:
-  jaeger-agent:
-    image: jaegertracing/jaeger-agent
-    command:
-      - "--reporter.grpc.host-port=jaeger-collector:14250" # collector grpc host and port
-    ports:
-      - "5775:5775/udp" # accept ziplin.thrift in compact (deprecated) 
-      - "6831:6831/udp" # accept jaeger.thrift in compact
-      - "6832:6832/udp" # accept jaeger.thrift in binary used by Node.js Jaeger client
-      - "5778:5778" # server configs
-    restart: on-failure
-    depends_on:
-      - jaeger-collector
-```
-
-Check more details on Jaeger docs [Deployment about Agent](https://www.jaegertracing.io/docs/1.33/deployment/#agent) and [CLI flags about Agent](https://www.jaegertracing.io/docs/1.33/cli/#jaeger-agent).
+Check more details on [Jaeger docs about architecture](https://www.jaegertracing.io/docs/1.47/architecture/).
 
 #### Jaeger Collector
 
-The Jaeger collector receives traces from Jaeger agents and runs them through a processing pipeline.
+The Jaeger collector receives traces from OpenTelemetry SDKs or OpenTelemetry Agent and runs them through a processing pipeline.
 
 ```yaml
 # docker-compose.yaml
 services:
   jaeger-collector:
-    image: jaegertracing/jaeger-collector
+    image: jaegertracing/jaeger-collector:1.47.0
     command: 
-      - "--cassandra.keyspace=jaeger_v1_dc1" # cassandra keyspace
-      - "--cassandra.servers=cassandra" # cassandra server host
-      - "--collector.zipkin.host-port=9411" # port accept Zipkin spans
-      - "--sampling.initial-sampling-probability=.5" # adaptive sampling options
-      - "--sampling.target-samples-per-second=.01" # adaptive sampling options
+      - "--cassandra.keyspace=jaeger_v1_dc1"
+      - "--cassandra.servers=cassandra"
+      - "--sampling.initial-sampling-probability=.5"
+      - "--sampling.target-samples-per-second=.01"
+      - "--collector.otlp.enabled=true"
     environment: 
-      - SAMPLING_CONFIG_TYPE=adaptive # with adaptive sampling strategy
+      - SAMPLING_CONFIG_TYPE=adaptive
     ports:
-      - "14269:14269" # admin port
-      - "14268:14268" # accept span in jaeger.thrift format over http
-      - "14250" # accept span in model.proto format over gRPC
-      - "9411:9411" # accept Zipkin spans
+      - "4317" # accept OpenTelemetry Protocol (OTLP) over gRPC
+      - "4318" # accept OpenTelemetry Protocol (OTLP) over HTTP
+      - "14250" # accept model.proto
     restart: on-failure
     depends_on:
       - cassandra-schema
 ```
 
-Check more details on Jaeger docs [Deployment about Collector](https://www.jaegertracing.io/docs/1.33/deployment/#collector), [CLI flags about Collector](https://www.jaegertracing.io/docs/1.33/cli/#jaeger-collector), and [Sampling](https://www.jaegertracing.io/docs/1.33/sampling/).
+Check more details on Jaeger docs [Deployment about Collector](https://www.jaegertracing.io/docs/1.47/deployment/#collector), [CLI flags about Collector](https://www.jaegertracing.io/docs/1.47/cli/#jaeger-collector), and [Sampling](https://www.jaegertracing.io/docs/1.47/sampling/).
+
+#### OpenTelemetry Collector
+
+The OpenTelemetry Collector receives traces from OpenTelemetry SDKs and processes them according to the configuration file `etc/otel-collector-config.yaml`.
+
+```yaml
+# docker-compose.yaml
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.81.0
+    command:
+      - "--config=/conf/config.yaml"
+    volumes:
+      - ./etc/otel-collector-config.yaml:/conf/config.yaml
+    ports:
+      - "4317" # OTLP gRPC receiver
+      - "4318" # OTLP http receiver
+    restart: on-failure
+    depends_on:
+      - jaeger-collector
+```
+
+```yaml
+# etc/otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http: 
+
+exporters:
+  otlp:
+    endpoint: jaeger-collector:4317
+    tls:
+      insecure: true
+  otlphttp:
+    endpoint: http://jaeger-collector:4318
+    tls:
+      insecure: true
+  jaeger:
+    endpoint: jaeger-collector:14250
+    tls:
+      insecure: true
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp] # export to jaeger-collector:4317
+      # exporters: [otlphttp] # export to jaeger-collector:4318
+      # exporters: [jaeger] # export to jaeger-collector:14250
+```
+
+Check more details on OpenTelemetry Collector docs [Configuration](https://opentelemetry.io/docs/collector/configuration/).
 
 #### Storage
 
@@ -208,16 +292,24 @@ In this demo, we use Cassandra as the storage backend.
 services:
   # Cassandra instance container
   cassandra:
-    image: cassandra:4.0
+    image: cassandra:4.1.2
 
   # initialize Cassandra
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema
+    image: jaegertracing/jaeger-cassandra-schema:1.47.0
     depends_on:
       - cassandra
 ```
 
-Check more details on Jaeger docs [Deployment about Span Storage Backends](https://www.jaegertracing.io/docs/1.33/deployment/#span-storage-backends).
+If you want to mitigate the pressure on Cassandra and prevent data loss, you can add Kafka and Jaeger Ingester to the architecture to process data asynchronously. The architecture will look like this:
+
+![Jaeger Architecture](./images/architecture-v2-2023.png)
+
+Image Source: [Jaeger](https://www.jaegertracing.io/docs/1.47/architecture/#via-kafka)
+
+There is a [docker compose example](https://github.com/jaegertracing/jaeger/tree/main/docker-compose/kafka) on Jaeger's official repository.
+
+Check more details on Jaeger docs [Deployment about Span Storage Backends](https://www.jaegertracing.io/docs/1.47/deployment/#span-storage-backends).
 
 #### Jaeger Query
 
@@ -227,19 +319,166 @@ The Jaeger Query is a service that retrieves traces from storage and hosts a UI 
 # docker-compose.yaml
 services:
   jaeger-query:
-    image: jaegertracing/jaeger-query
-    command: 
-      - "--cassandra.keyspace=jaeger_v1_dc1" # cassandra keyspace
-      - "--cassandra.servers=cassandra" # cassandra server host
+    image: jaegertracing/jaeger-query:1.47.0
+    command:
+      - "--cassandra.keyspace=jaeger_v1_dc1"
+      - "--cassandra.servers=cassandra"
     ports:
-      - "16686:16686" # Jaeger UI and api port
-      - "16687" # admin port
+      - "16686:16686"
+      - "16687:16687"
     restart: on-failure
     depends_on:
       - cassandra-schema
 ```
 
-Check more details on Jaeger docs [Deployment about Query Service & UI](https://www.jaegertracing.io/docs/1.33/deployment/#query-service--ui).
+Check more details on Jaeger docs [Deployment about Query Service & UI](https://www.jaegertracing.io/docs/1.47/deployment/#query-service--ui).
+
+## With Service Performance Monitoring
+
+Jaeger Service Performance Monitoring become stable since Jaeger 1.43.0. It provides a new way to monitor the performance of services, which extracts the RED (Request, Error, Duration) metrics from span data. The data flow is shown below:
+
+![Demo Project Architecture with SPM](./images/demo-arch-spm.jpg)
+
+### Quick Start
+
+1. Build application image and start all services with docker-compose
+
+   ```bash
+   docker-compose build
+   docker-compose -f docker-compose-spm.yaml up -d
+   ```
+
+   It may take some time for DB(Cassandra) to initialize. You can run `docker-compose ps` to check the `jaeger-query` status is running when DB is ready.
+
+2. Send requests with [siege](https://linux.die.net/man/1/siege) and curl to the FastAPI app
+
+   ```bash
+   bash request-script.sh
+   ```
+
+3. Check on Jaeger UI Monitoring tab [http://localhost:16686/monitor](http://localhost:16686/monitor)
+
+   Jaeger UI Monitoring tab screenshot:
+
+   ![Jaeger UI Monitoring Tab](./images/jaeger-ui-monitor.png)
+
+### Details
+
+To enable Service Performance Monitoring, we need to:
+
+1. Add some configurations to OpenTelemetry Collector for extracting RED metrics from span data and exporting them to Prometheus.
+2. Create a Prometheus instance to store the metrics.
+3. Update Jaeger Query configurations to scrape metrics from Prometheus.
+
+#### OpenTelemetry Collector
+
+The OpenTelemetry Collector receives traces from OpenTelemetry SDKs and processes them according to the configuration file `etc/otel-collector-config-spm.yaml`.
+
+```yaml
+# docker-compose-spm.yaml
+service:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.81.0
+    command:
+      - "--config=/conf/config.yaml"
+    volumes:
+      - ./etc/otel-collector-config-spm.yaml:/conf/config.yaml
+    ports:
+      - "4317" # OTLP gRPC receiver
+      - "4318" # OTLP http receiver
+      - "8889" # Prometheus metrics exporter
+    restart: on-failure
+    depends_on:
+      - jaeger-collector
+```
+
+```yaml
+# etc/otel-collector-config-spm.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http: 
+
+exporters:
+  otlp:
+    endpoint: jaeger-collector:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+connectors:
+  spanmetrics:
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [spanmetrics, otlp]
+    metrics/spanmetrics:
+      receivers: [spanmetrics]
+      exporters: [prometheus]
+```
+
+#### Prometheus
+
+Prometheus collects metrics from OpenTelemetry Collector and stores them in its database. The metrics can be scraped by Jaeger Query.
+
+```yaml
+# docker-compose-spm.yaml
+service:
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./etc/prometheus.yml:/workspace/prometheus.yml
+    command:
+      - --config.file=/workspace/prometheus.yml
+```
+
+```yaml
+# etc/prometheus.yml
+global:
+  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+scrape_configs:
+  - job_name: aggregated-trace-metrics
+    static_configs:
+    - targets: ['otel-collector:8889']
+```
+
+#### Jaeger Query
+
+Jaeger Query scrapes metrics from Prometheus and displays them on the Monitoring tab.
+
+```yaml
+# docker-compose-spm.yaml
+service:
+  jaeger-query:
+    image: jaegertracing/jaeger-query:1.47.0
+    environment:
+      - METRICS_STORAGE_TYPE=prometheus
+      - PROMETHEUS_SERVER_URL=http://prometheus:9090
+      - PROMETHEUS_QUERY_SUPPORT_SPANMETRICS_CONNECTOR=true
+      - PROMETHEUS_QUERY_DURATION_UNIT=s
+    command:
+      - "--cassandra.keyspace=jaeger_v1_dc1"
+      - "--cassandra.servers=cassandra"
+    ports:
+      - "16686:16686"
+      - "16687:16687"
+    restart: on-failure
+    depends_on:
+      - cassandra-schema
+```
 
 ## With Grafana and Loki
 
@@ -259,7 +498,7 @@ Only viewing the trace information on Jaeger UI may not be good enough. How abou
 
    ```bash
    docker-compose build
-   docker-compose up -d
+   docker-compose -f docker-compose-grafana.yaml up -d
    ```
 
    It may take some time for DB(Cassandra) to initialize.
@@ -302,7 +541,7 @@ Receives spans from applications.
 
 1. Data source: target log source
 2. Tags: key of tags or process level attributes from the trace, which will be log query criteria if the key exists in the trace
-3. Map tag names: Convert existing key of tags or process level attributes from trace to another key, then used as log query criterial. Use this feature when the values of the trace tag and log label are identical but the keys are different.
+3. Map tag names: Convert existing key of tags or process level attributes from trace to another key, then used as log query criteria. Use this feature when the values of the trace tag and log label are identical but the keys are different.
 
 Grafana data source setting example:
 
@@ -311,6 +550,7 @@ Grafana data source setting example:
 Grafana data sources config example:
 
 ```yaml
+# etc/grafana/datasource.yml
 name: Jaeger
 type: jaeger
 typeName: Jaeger
@@ -345,6 +585,7 @@ Collects logs with Loki Docker Driver from applications.
    2. loki-pipeline-stages: processes multiline log from FastAPI application with multiline and regex stages ([reference](https://grafana.com/docs/loki/latest/clients/promtail/stages/multiline/))
 
 ```yaml
+# docker-compose-grafana.yaml
 x-logging: &default-logging # anchor(&): 'default-logging' for defines a chunk of configuration
   driver: loki
   options:
@@ -360,9 +601,9 @@ x-logging: &default-logging # anchor(&): 'default-logging' for defines a chunk o
 version: "3.4"
 
 services:
-   foo:
-      image: foo
-      logging: *default-logging # alias(*): refer to 'default-logging' chunk 
+  foo: # sample service
+    image: foo
+    logging: *default-logging # alias(*): refer to 'default-logging' chunk 
 ```
 
 ##### Grafana Data Source
@@ -376,6 +617,7 @@ Grafana data source setting example:
 Grafana data source config example:
 
 ```yaml
+# etc/grafana/datasource.yml
 name: Loki
 type: loki
 typeName: Loki
@@ -402,14 +644,23 @@ editable: true
 1. Add Jaeger, and Loki to the data source with config file ```etc/grafana/datasource.yml```.
 
 ```yaml
-# grafana in docker-compose.yaml
-grafana:
-   image: grafana/grafana:9.1.7
-   volumes:
+# grafana in docker-compose-grafana.yaml
+service:
+  grafana:
+    image: grafana/grafana:9.4.13
+    ports:
+      - "3000:3000"
+    volumes:
       - ./etc/grafana/:/etc/grafana/provisioning/datasources # data sources
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
 ```
 
 # Reference
 
 1. [Jaeger](https://www.jaegertracing.io/)
 2. [Official Jaeger docker compose example](https://github.com/jaegertracing/jaeger/blob/main/docker-compose/jaeger-docker-compose.yml)
+3. [Official Jaeger with SPM docker compose example](https://github.com/jaegertracing/jaeger/tree/main/docker-compose/monitor)
+4. [Difference between OpenTelemetry Collector and OpenTelemetry Collector Contrib](https://uptrace.dev/opentelemetry/collector.html#otelcol-vs-otelcol-contrib)
