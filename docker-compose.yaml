@@ -5,78 +5,93 @@ services:
     build: ./fastapi_app/
     ports:
       - "8000:8000"
+    volumes:
+      - ./fastapi_app:/app
     environment:
       APP_NAME: "app-a"
-      MODE: "grpc"
-      COLLECTOR_ENDPOINT_GRPC_ENDPOINT: "jaeger-collector:14250"
+      MODE: "otel-collector-grpc"
+      OTEL_GRPC_ENDPOINT: "otel-collector:4317"
   
   app-b:
     build: ./fastapi_app/
     ports:
       - "8001:8000"
+    volumes:
+      - ./fastapi_app:/app
     environment:
       APP_NAME: "app-b"
-      MODE: "thrift-collector"
-      COLLECTOR_THRIFT_URL: "http://jaeger-collector:14268"
+      MODE: "otel-collector-http"
+      OTEL_HTTP_ENDPOINT: "http://otel-collector:4318/v1/traces"
   
   app-c:
     build: ./fastapi_app/
     ports:
       - "8002:8000"
+    volumes:
+      - ./fastapi_app:/app
     environment:
       APP_NAME: "app-c"
-      MODE: "thrift-agent"
-      AGENT_HOST_NAME: "jaeger-agent"
-      AGENT_PORT: 6831
+      MODE: "jaeger-grpc"
+      JAEGER_GRPC_ENDPOINT: "jaeger-collector:4317"
 
-  jaeger-agent:
-    image: jaegertracing/jaeger-agent:1.38.1
-    command: 
-      - "--reporter.grpc.host-port=jaeger-collector:14250"
+  app-d:
+    build: ./fastapi_app/
     ports:
-      - "5775:5775/udp"
-      - "6831:6831/udp"
-      - "6832:6832/udp"
-      - "5778:5778"
-    restart: on-failure
-    depends_on:
-      - jaeger-collector
+      - "8003:8000"
+    volumes:
+      - ./fastapi_app:/app
+    environment:
+      APP_NAME: "app-d"
+      MODE: "jaeger-http"
+      JAEGER_HTTP_ENDPOINT: "http://jaeger-collector:4318/v1/traces"
 
   jaeger-collector:
-    image: jaegertracing/jaeger-collector:1.38.1
+    image: jaegertracing/jaeger-collector:1.47.0
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
-      - "--collector.zipkin.host-port=9411"
       - "--sampling.initial-sampling-probability=.5"
       - "--sampling.target-samples-per-second=.01"
+      - "--collector.otlp.enabled=true"
     environment: 
       - SAMPLING_CONFIG_TYPE=adaptive
     ports:
-      - "14269:14269"
-      - "14268:14268"
-      - "14250"
-      - "9411:9411"
+      - "4317" # accept OpenTelemetry Protocol (OTLP) over gRPC
+      - "4318" # accept OpenTelemetry Protocol (OTLP) over HTTP
+      - "14250" # accept model.proto
     restart: on-failure
     depends_on:
       - cassandra-schema
 
   cassandra:
-    image: cassandra:4.0
+    image: cassandra:4.1.2
 
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema:1.38.1
+    image: jaegertracing/jaeger-cassandra-schema:1.47.0
     depends_on:
       - cassandra
 
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.38.1
+    image: jaegertracing/jaeger-query:1.47.0
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
     ports:
       - "16686:16686"
-      - "16687"
+      - "16687:16687"
     restart: on-failure
     depends_on:
       - cassandra-schema
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.81.0
+    command:
+      - "--config=/conf/config.yaml"
+    volumes:
+      - ./etc/otel-collector-config.yaml:/conf/config.yaml
+    ports:
+      - "4317" # OTLP gRPC receiver
+      - "4318" # OTLP http receiver
+    restart: on-failure
+    depends_on:
+      - jaeger-collector

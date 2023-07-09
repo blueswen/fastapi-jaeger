@@ -1,0 +1,31 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http: 
+
+exporters:
+  otlp:
+    endpoint: jaeger-collector:4317
+    tls:
+      insecure: true
+  otlphttp:
+    endpoint: http://jaeger-collector:4318
+    tls:
+      insecure: true
+  jaeger:
+    endpoint: jaeger-collector:14250
+    tls:
+      insecure: true
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp] # export to jaeger-collector:4317
+      # exporters: [otlphttp] # export to jaeger-collector:4318
+      # exporters: [jaeger] # export to jaeger-collector:14250

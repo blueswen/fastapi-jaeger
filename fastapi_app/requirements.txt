@@ -1,9 +1,8 @@
-httpx==0.23.0
-fastapi==0.85.0
-uvicorn==0.18.3
-opentelemetry-instrumentation-fastapi==0.34b0
-opentelemetry-instrumentation-logging==0.34b0
-opentelemetry-exporter-jaeger-thrift==1.13.0
-opentelemetry-exporter-jaeger-proto-grpc==1.13.0
-opentelemetry-api==1.13.0
-opentelemetry-sdk==1.13.0
+httpx==0.24.1
+fastapi==0.100.0
+uvicorn==0.22.0
+opentelemetry-instrumentation-fastapi==0.39b0
+opentelemetry-instrumentation-logging==0.39b0
+opentelemetry-exporter-otlp==1.18.0
+opentelemetry-api==1.18.0
+opentelemetry-sdk==1.18.0
