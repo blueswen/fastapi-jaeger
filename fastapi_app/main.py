@@ -133,7 +133,7 @@ async def random_sleep(response: Response):
 
 
 @app.get("/error_test")
-async def random_sleep(response: Response):
+async def error_test(response: Response):
     logging.error("got error!!!!")
     raise ValueError("value error")
 
@@ -147,7 +147,7 @@ async def chain(response: Response):
 
     async with httpx.AsyncClient() as client:
         await client.get(
-            f"http://localhost:8000/",
+            "http://localhost:8000/",
             headers=headers,
         )
     async with httpx.AsyncClient() as client:
