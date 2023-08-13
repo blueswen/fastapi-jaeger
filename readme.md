@@ -61,7 +61,9 @@ Jaeger Agent has been deprecated since version 1.43. Since version 1.43, OpenTel
    docker-compose up -d
    ```
 
-   It may take some time for DB(Cassandra) to initialize. You can run `docker-compose ps` to check the `jaeger-query` status is running when DB is ready.
+   It may take some time for DB(Cassandra) to initialize. You can run `docker-compose ps` to check the `jaeger-query` status is running when DB is ready as below:
+
+   ![Container Status](./images/containers.png)
 
 2. Send requests with `curl` to the FastAPI application
 
