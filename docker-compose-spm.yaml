@@ -11,6 +11,8 @@ services:
       APP_NAME: "app-a"
       MODE: "otel-collector-grpc"
       OTEL_GRPC_ENDPOINT: "otel-collector:4317"
+      TARGET_ONE_HOST: "app-b"
+      TARGET_TWO_HOST: "app-c"
   
   app-b:
     build: ./fastapi_app/
@@ -22,6 +24,8 @@ services:
       APP_NAME: "app-b"
       MODE: "otel-collector-grpc"
       OTEL_GRPC_ENDPOINT: "otel-collector:4317"
+      TARGET_ONE_HOST: "app-b"
+      TARGET_TWO_HOST: "app-c"
   
   app-c:
     build: ./fastapi_app/
@@ -33,6 +37,8 @@ services:
       APP_NAME: "app-c"
       MODE: "otel-collector-http"
       OTEL_HTTP_ENDPOINT: "http://otel-collector:4318/v1/traces"
+      TARGET_ONE_HOST: "app-b"
+      TARGET_TWO_HOST: "app-c"
 
   app-d:
     build: ./fastapi_app/
@@ -44,6 +50,8 @@ services:
       APP_NAME: "app-d"
       MODE: "otel-collector-http"
       OTEL_HTTP_ENDPOINT: "http://otel-collector:4318/v1/traces"
+      TARGET_ONE_HOST: "app-b"
+      TARGET_TWO_HOST: "app-c"
 
   jaeger-collector:
     image: jaegertracing/jaeger-collector:1.47.0
