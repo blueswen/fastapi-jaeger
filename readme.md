@@ -199,7 +199,7 @@ The Jaeger collector receives traces from OpenTelemetry SDKs or OpenTelemetry Ag
 # docker-compose.yaml
 services:
   jaeger-collector:
-    image: jaegertracing/jaeger-collector:1.47.0
+    image: jaegertracing/jaeger-collector:1.50.0
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -227,7 +227,7 @@ The OpenTelemetry Collector receives traces from OpenTelemetry SDKs and processe
 # docker-compose.yaml
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.81.0
+    image: otel/opentelemetry-collector-contrib:0.88.0
     command:
       - "--config=/conf/config.yaml"
     volumes:
@@ -298,7 +298,7 @@ services:
 
   # initialize Cassandra
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema:1.47.0
+    image: jaegertracing/jaeger-cassandra-schema:1.50.0
     depends_on:
       - cassandra
 ```
@@ -321,7 +321,7 @@ The Jaeger Query is a service that retrieves traces from storage and hosts a UI 
 # docker-compose.yaml
 services:
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.47.0
+    image: jaegertracing/jaeger-query:1.50.0
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -427,6 +427,18 @@ service:
       exporters: [prometheus]
 ```
 
+To generate metrics from span data, we need to:
+
+1. Add `spanmetrics` to `connectors`: Enable and configure the spanmetrics connector
+   1. dimensions: Extract span attributes to Prometheus labels
+2. Add `spanmetrics` to traces pipeline `exporters`: Let the traces pipeline export traces to the spanmetrics connector
+3. Add `spanmetrics` to metrics pipeline `receivers`: Set the spanmetrics connector as the receiver of the metrics pipeline, and the data is from the traces pipeline exporter
+4. Add `prometheus` to metrics pipeline `exporters`: Expose metrics in Prometheus format on port 8889
+
+The pipeline diagram and configuration file are as follows:
+
+![Span Metrics Pipeline](./images/spanmetrics-pipeline.png)
+
 #### Prometheus
 
 Prometheus collects metrics from OpenTelemetry Collector and stores them in its database. The metrics can be scraped by Jaeger Query.
@@ -465,15 +477,16 @@ Jaeger Query scrapes metrics from Prometheus and displays them on the Monitoring
 # docker-compose-spm.yaml
 service:
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.47.0
+    image: jaegertracing/jaeger-query:1.50.0
     environment:
       - METRICS_STORAGE_TYPE=prometheus
-      - PROMETHEUS_SERVER_URL=http://prometheus:9090
-      - PROMETHEUS_QUERY_SUPPORT_SPANMETRICS_CONNECTOR=true
-      - PROMETHEUS_QUERY_DURATION_UNIT=s
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
+      - "--prometheus.query.support-spanmetrics-connector=true"
+      - "--prometheus.server-url=http://prometheus:9090"
+      - "--prometheus.query.normalize-duration=true"
+      - "--prometheus.query.normalize-calls=true"
     ports:
       - "16686:16686"
       - "16687:16687"
@@ -511,7 +524,7 @@ Only viewing the trace information on Jaeger UI may not be good enough. How abou
    curl http://localhost:8000/chain
    ```
 
-4. Explore the collected span on Grafana [http://localhost:3000/](http://localhost:3000/)
+4. Explore the collected span on Grafana [http://localhost:3000/](http://localhost:3000/) with default user `admin` and password `admin`
 
    Grafana Explore screenshot:
 
