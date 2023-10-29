@@ -68,12 +68,10 @@ services:
       TARGET_TWO_HOST: "app-c"
 
   jaeger-collector:
-    image: jaegertracing/jaeger-collector:1.47.0
+    image: jaegertracing/jaeger-collector:1.50.0
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
-      - "--sampling.initial-sampling-probability=.5"
-      - "--sampling.target-samples-per-second=.01"
       - "--collector.otlp.enabled=true"
     environment: 
       - SAMPLING_CONFIG_TYPE=adaptive
@@ -89,12 +87,12 @@ services:
     image: cassandra:4.1.2
 
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema:1.47.0
+    image: jaegertracing/jaeger-cassandra-schema:1.50.0
     depends_on:
       - cassandra
 
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.47.0
+    image: jaegertracing/jaeger-query:1.50.0
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -106,7 +104,7 @@ services:
       - cassandra-schema
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.81.0
+    image: otel/opentelemetry-collector-contrib:0.88.0
     command:
       - "--config=/conf/config.yaml"
     volumes:
@@ -119,18 +117,14 @@ services:
       - jaeger-collector
 
   grafana:
-    image: grafana/grafana:9.4.13
+    image: grafana/grafana:10.2.0
     ports:
       - "3000:3000"
     volumes:
       - ./etc/grafana/:/etc/grafana/provisioning/datasources
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
 
   loki:
-    image: grafana/loki:2.8.2
+    image: grafana/loki:2.9.2
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - "3100:3100"
