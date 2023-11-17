@@ -11,7 +11,7 @@ There are four ways to push span:
 - A: Push span to OpenTelemetry Collector with gRPC (Port: 4317)
 - B: Push span to OpenTelemetry Collector over HTTP (Port: 4318)
 - C: Push span to Jaeger Collector with gRPC (Port: 4317)
-- D: Push span to Jaeger Collector with gRPC (Port: 4318)
+- D: Push span to Jaeger Collector with HTTP (Port: 4318)
 
 In this architecture, OpenTelemetry Collector is an agent to collect and process data and sent data to Jaeger Collector. Jaeger Collector is responsible for collecting span and writing span to DB, then Jaeger Query queries data from DB.
 
