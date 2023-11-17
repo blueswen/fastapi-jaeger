@@ -257,10 +257,6 @@ exporters:
     endpoint: http://jaeger-collector:4318
     tls:
       insecure: true
-  jaeger:
-    endpoint: jaeger-collector:14250
-    tls:
-      insecure: true
 
 processors:
   batch:
@@ -272,7 +268,6 @@ service:
       processors: [batch]
       exporters: [otlp] # export to jaeger-collector:4317
       # exporters: [otlphttp] # export to jaeger-collector:4318
-      # exporters: [jaeger] # export to jaeger-collector:14250
 ```
 
 Check more details on OpenTelemetry Collector docs [Configuration](https://opentelemetry.io/docs/collector/configuration/).

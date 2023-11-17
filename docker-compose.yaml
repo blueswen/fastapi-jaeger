@@ -64,7 +64,6 @@ services:
     ports:
       - "4317" # accept OpenTelemetry Protocol (OTLP) over gRPC
       - "4318" # accept OpenTelemetry Protocol (OTLP) over HTTP
-      - "14250" # accept model.proto
     restart: on-failure
     depends_on:
       - cassandra-schema

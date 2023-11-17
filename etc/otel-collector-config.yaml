@@ -13,10 +13,6 @@ exporters:
     endpoint: http://jaeger-collector:4318
     tls:
       insecure: true
-  jaeger:
-    endpoint: jaeger-collector:14250
-    tls:
-      insecure: true
 
 processors:
   batch:
