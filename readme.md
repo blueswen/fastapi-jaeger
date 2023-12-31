@@ -13,7 +13,7 @@ There are four ways to push span:
 - C: Push span to Jaeger Collector with gRPC (Port: 4317)
 - D: Push span to Jaeger Collector with HTTP (Port: 4318)
 
-In this architecture, OpenTelemetry Collector is an agent to collect and process data and sent data to Jaeger Collector. Jaeger Collector is responsible for collecting span and writing span to DB, then Jaeger Query queries data from DB.
+In this architecture, OpenTelemetry Collector is an agent to collects, processes, and sends data to Jaeger Collector. Jaeger Collector is responsible for collecting span and writing span to DB, then Jaeger Query queries data from DB.
 
 Jaeger Agent has been deprecated since version 1.43. Since version 1.43, OpenTelemetry SDK allows direct data transmission to Jaeger Collector or utilization of OpenTelemetry Collector as an Agent. If you still want to utilize Jaeger Agent for span collection, please refer to the previous version of this [project](https://github.com/blueswen/fastapi-jaeger/tree/jaeger-agent).
 
@@ -54,10 +54,9 @@ Jaeger Agent has been deprecated since version 1.43. Since version 1.43, OpenTel
 
 ## Quick Start
 
-1. Build application image and start all services with docker-compose
+1. Start all services with docker-compose
 
    ```bash
-   docker-compose build
    docker-compose up -d
    ```
 
@@ -89,55 +88,39 @@ For a more complex scenario, we use three FastAPI applications with the same cod
 
 Utilize [OpenTelemetry Python SDK](https://github.com/open-telemetry/opentelemetry-python) to send span to Jaeger. Each request span contains other child spans when using OpenTelemetry instrumentation. The reason is that instrumentation will catch each internal asgi interaction ([opentelemetry-python-contrib issue #831](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/831#issuecomment-1005163018)). If you want to get rid of the internal spans, there is a [workaround](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/831#issuecomment-1116225314) in the same issue #831 by using a new OpenTelemetry middleware with two overridden methods of span processing.
 
-Utilize [OpenTelemetry Logging Instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/logging/logging.html) override logger format which with trace id and span id.
+Utilize [OpenTelemetry Logging Instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/logging/logging.html) to apply logger format with trace id and span id.
 
 ```py
 # fastapi_app/main.py
 
-# jaeger-grpc, jaeger-http, otel-collector-grpc, otel-collector-http
-MODE = os.environ.get("MODE", "otel-collector-grpc")
+# otlp-grpc, otlp-http
+MODE = os.environ.get("MODE", "otlp-grpc")
 
-JAEGER_GRPC_ENDPOINT = os.environ.get("JAEGER_GRPC_ENDPOINT", "jaeger-collector:4317")
-JAEGER_HTTP_ENDPOINT = os.environ.get(
-    "JAEGER_HTTP_ENDPOINT", "http://jaeger-collector:4318/v1/traces"
-)
-OTEL_GRPC_ENDPOINT = os.environ.get("OTEL_GRPC_ENDPOINT", "otel-collector:4317")
-OTEL_HTTP_ENDPOINT = os.environ.get(
-    "OTEL_HTTP_ENDPOINT", "http://otel-collector:4318/v1/traces"
+OTLP_GRPC_ENDPOINT = os.environ.get("OTLP_GRPC_ENDPOINT", "jaeger-collector:4317")
+OTLP_HTTP_ENDPOINT = os.environ.get(
+    "OTLP_HTTP_ENDPOINT", "http://jaeger-collector:4318/v1/traces"
 )
 
-def setting_jaeger(app: ASGIApp, app_name: str, log_correlation: bool = True) -> None:
-    resource = Resource.create(attributes={"service.name": app_name})
-
+def setting_jaeger(app: ASGIApp, log_correlation: bool = True) -> None:
     # set the tracer provider
-    tracer = TracerProvider(resource=resource)
+    tracer = TracerProvider()
     trace.set_tracer_provider(tracer)
 
-    if MODE == "jaeger-grpc":
+    if MODE == "otlp-grpc":
         tracer.add_span_processor(
             BatchSpanProcessor(
-                OTLPSpanExporterGRPC(endpoint=JAEGER_GRPC_ENDPOINT, insecure=True)
+                OTLPSpanExporterGRPC(endpoint=OTLP_GRPC_ENDPOINT, insecure=True)
             )
         )
-    elif MODE == "jaeger-http":
+    elif MODE == "otlp-http":
         tracer.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=JAEGER_HTTP_ENDPOINT))
-        )
-    elif MODE == "otel-collector-grpc":
-        tracer.add_span_processor(
-            BatchSpanProcessor(
-                OTLPSpanExporterGRPC(endpoint=OTEL_GRPC_ENDPOINT, insecure=True)
-            )
-        )
-    elif MODE == "otel-collector-http":
-        tracer.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=OTEL_HTTP_ENDPOINT))
+            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=OTLP_HTTP_ENDPOINT))
         )
     else:
-        # default otel-collector-grpc
+        # default otlp-grpc
         tracer.add_span_processor(
             BatchSpanProcessor(
-                OTLPSpanExporterGRPC(endpoint=OTEL_GRPC_ENDPOINT, insecure=True)
+                OTLPSpanExporterGRPC(endpoint=OTLP_GRPC_ENDPOINT, insecure=True)
             )
         )
 
@@ -150,7 +133,7 @@ def setting_jaeger(app: ASGIApp, app_name: str, log_correlation: bool = True) ->
 
 #### Span Inject
 
-If we want other services to use the same Trace ID, we have to use `inject` function to add current span information to the header. Because OpenTelemetry FastAPI instrumentation only takes care of the asgi app's request and response, it does not affect any other modules or actions like sending HTTP requests to other servers or function calls.
+If we want other services to use the same Trace ID as the source application, we have to pass the Trace ID to the header of the request. In this demo, we use `inject` function to add current span information to the header. Because OpenTelemetry FastAPI instrumentation only takes care of the asgi app's request and response, it does not affect any other modules or actions like sending HTTP requests to other servers or function calls.
 
 ```py
 # fastapi_app/main.py
@@ -159,7 +142,6 @@ from opentelemetry.propagate import inject
 
 @app.get("/chain")
 async def chain(response: Response):
-
     headers = {}
     inject(headers)  # inject trace info to header
 
@@ -169,6 +151,26 @@ async def chain(response: Response):
         await client.get(f"http://{TARGET_ONE_HOST}:8000/io_task", headers=headers,)
     async with httpx.AsyncClient() as client:
         await client.get(f"http://{TARGET_TWO_HOST}:8000/cpu_task", headers=headers,)
+
+    return {"path": "/chain"}
+```
+
+Or we can just use the instrumentation library for [different libraries](https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation#readme). Like [OpenTelemetry HTTPX Instrumentation](https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-httpx) or [OpenTelemetry Requests Instrumentation](https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-requests) according to the library we use. Following is the example of using OpenTelemetry HTTPX Instrumentation which will automatically inject trace info to the header.
+
+```py
+import httpx
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+HTTPXClientInstrumentor().instrument()
+
+@app.get("/chain")
+async def chain(response: Response):
+    async with httpx.AsyncClient() as client:
+        await client.get(f"http://localhost:8000/")
+    async with httpx.AsyncClient() as client:
+        await client.get(f"http://{TARGET_ONE_HOST}:8000/io_task")
+    async with httpx.AsyncClient() as client:
+        await client.get(f"http://{TARGET_TWO_HOST}:8000/cpu_task")
 
     return {"path": "/chain"}
 ```
@@ -199,7 +201,7 @@ The Jaeger collector receives traces from OpenTelemetry SDKs or OpenTelemetry Ag
 # docker-compose.yaml
 services:
   jaeger-collector:
-    image: jaegertracing/jaeger-collector:1.50.0
+    image: jaegertracing/jaeger-collector:1.52.0
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -227,7 +229,7 @@ The OpenTelemetry Collector receives traces from OpenTelemetry SDKs and processe
 # docker-compose.yaml
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.88.0
+    image: otel/opentelemetry-collector-contrib:0.91.0
     command:
       - "--config=/conf/config.yaml"
     volumes:
@@ -293,7 +295,7 @@ services:
 
   # initialize Cassandra
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema:1.50.0
+    image: jaegertracing/jaeger-cassandra-schema:1.52.0
     depends_on:
       - cassandra
 ```
@@ -316,7 +318,7 @@ The Jaeger Query is a service that retrieves traces from storage and hosts a UI 
 # docker-compose.yaml
 services:
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.50.0
+    image: jaegertracing/jaeger-query:1.52.0
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -338,10 +340,9 @@ Jaeger Service Performance Monitoring become stable since Jaeger 1.43.0. It prov
 
 ### Quick Start
 
-1. Build application image and start all services with docker-compose
+1. Start all services with docker-compose
 
    ```bash
-   docker-compose build
    docker-compose -f docker-compose-spm.yaml up -d
    ```
 
@@ -442,7 +443,7 @@ Prometheus collects metrics from OpenTelemetry Collector and stores them in its 
 # docker-compose-spm.yaml
 service:
   prometheus:
-    image: prom/prometheus:v2.45.0
+    image: prom/prometheus:v2.48.1
     ports:
       - "9090:9090"
     volumes:
@@ -472,7 +473,7 @@ Jaeger Query scrapes metrics from Prometheus and displays them on the Monitoring
 # docker-compose-spm.yaml
 service:
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.50.0
+    image: jaegertracing/jaeger-query:1.52.0
     environment:
       - METRICS_STORAGE_TYPE=prometheus
     command:
@@ -504,14 +505,19 @@ Only viewing the trace information on Jaeger UI may not be good enough. How abou
    docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
    ```
 
-2. Build application image and start all services with docker-compose
+2. Start all services with docker-compose
 
    ```bash
-   docker-compose build
    docker-compose -f docker-compose-grafana.yaml up -d
    ```
 
-   It may take some time for DB(Cassandra) to initialize.
+   It may take some time for DB(Cassandra) to initialize. You can run `docker-compose ps` to check the `jaeger-query` status is running when DB is ready.
+
+   If got the error message `Error response from daemon: error looking up logging plugin loki: plugin loki found but disabled`, please run the following command to enable the plugin:
+
+   ```bash
+    docker plugin enable loki
+    ```
 
 3. Send requests with `curl` to the FastAPI application
 
@@ -529,7 +535,7 @@ Only viewing the trace information on Jaeger UI may not be good enough. How abou
 
 #### Traces to Logs
 
-Get Trace ID and tags (here is `compose.service` mapping to `compose_service`) defined in Jaeger data source from span, then query with Loki.
+Get Trace ID and tags defined in Jaeger data source from span, then query with Loki.
 
 ![Traces to Logs](./images/traces-to-logs.png)
 
@@ -579,8 +585,7 @@ jsonData:
     filterByTraceID: true
     mapTagNamesEnabled: true
     mappedTags:
-      - key: service.name
-        value: compose_service
+      - key: compose_service
 ```
 
 #### Loki - Logs
@@ -657,15 +662,11 @@ editable: true
 # grafana in docker-compose-grafana.yaml
 service:
   grafana:
-    image: grafana/grafana:9.4.13
+    image: grafana/grafana:10.2.3
     ports:
       - "3000:3000"
     volumes:
-      - ./etc/grafana/:/etc/grafana/provisioning/datasources # data sources
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      - ./etc/grafana/:/etc/grafana/provisioning/datasources
 ```
 
 # Reference
