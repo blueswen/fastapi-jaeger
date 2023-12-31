@@ -2,41 +2,44 @@ version: "3.4"
 
 services:
   app-a:
-    build: ./fastapi_app/
+    # build: ./fastapi_app/
+    image: ghcr.io/blueswen/fastapi-jaeger/app:latest
     ports:
       - "8000:8000"
     volumes:
       - ./fastapi_app:/app
     environment:
-      APP_NAME: "app-a"
-      MODE: "otel-collector-grpc"
-      OTEL_GRPC_ENDPOINT: "otel-collector:4317"
+      MODE: "otlp-grpc"
+      OTEL_SERVICE_NAME: "app-a"
+      OTLP_GRPC_ENDPOINT: "otel-collector:4317"
       TARGET_ONE_HOST: "app-b"
       TARGET_TWO_HOST: "app-c"
   
   app-b:
-    build: ./fastapi_app/
+    # build: ./fastapi_app/
+    image: ghcr.io/blueswen/fastapi-jaeger/app:latest
     ports:
       - "8001:8000"
     volumes:
       - ./fastapi_app:/app
     environment:
-      APP_NAME: "app-b"
-      MODE: "otel-collector-http"
-      OTEL_HTTP_ENDPOINT: "http://otel-collector:4318/v1/traces"
+      MODE: "otlp-http"
+      OTEL_SERVICE_NAME: "app-b"
+      OTLP_HTTP_ENDPOINT: "http://otel-collector:4318/v1/traces"
       TARGET_ONE_HOST: "app-b"
       TARGET_TWO_HOST: "app-c"
   
   app-c:
-    build: ./fastapi_app/
+    # build: ./fastapi_app/
+    image: ghcr.io/blueswen/fastapi-jaeger/app:latest
     ports:
       - "8002:8000"
     volumes:
       - ./fastapi_app:/app
     environment:
-      APP_NAME: "app-c"
-      MODE: "jaeger-grpc"
-      JAEGER_GRPC_ENDPOINT: "jaeger-collector:4317"
+      MODE: "otlp-grpc"
+      OTEL_SERVICE_NAME: "app-c"
+      OTLP_GRPC_ENDPOINT: "jaeger-collector:4317"
       TARGET_ONE_HOST: "app-b"
       TARGET_TWO_HOST: "app-c"
 
@@ -47,14 +50,14 @@ services:
     volumes:
       - ./fastapi_app:/app
     environment:
-      APP_NAME: "app-d"
-      MODE: "jaeger-http"
-      JAEGER_HTTP_ENDPOINT: "http://jaeger-collector:4318/v1/traces"
+      MODE: "otlp-http"
+      OTEL_SERVICE_NAME: "app-d"
+      OTLP_HTTP_ENDPOINT: "http://jaeger-collector:4318/v1/traces"
       TARGET_ONE_HOST: "app-b"
       TARGET_TWO_HOST: "app-c"
 
   jaeger-collector:
-    image: jaegertracing/jaeger-collector:1.50.0
+    image: jaegertracing/jaeger-collector:1.52.0
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -72,12 +75,12 @@ services:
     image: cassandra:4.1.2
 
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema:1.50.0
+    image: jaegertracing/jaeger-cassandra-schema:1.52.0
     depends_on:
       - cassandra
 
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.50.0
+    image: jaegertracing/jaeger-query:1.52.0
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -89,7 +92,7 @@ services:
       - cassandra-schema
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.88.0
+    image: otel/opentelemetry-collector-contrib:0.91.0
     command:
       - "--config=/conf/config.yaml"
     volumes:

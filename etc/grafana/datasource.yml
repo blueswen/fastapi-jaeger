@@ -49,6 +49,5 @@ datasources:
         filterByTraceID: true
         mapTagNamesEnabled: true
         mappedTags:
-          - key: service.name
-            value: compose_service
+          - key: compose_service
     readOnly: false

@@ -17,24 +17,18 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.propagate import inject
-from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from starlette.types import ASGIApp
 
-APP_NAME = os.environ.get("APP_NAME", "app")
 EXPOSE_PORT = os.environ.get("EXPOSE_PORT", 8000)
 
-# jaeger-grpc, jaeger-http, otel-collector-grpc, otel-collector-http
-MODE = os.environ.get("MODE", "otel-collector-grpc")
+# otlp-grpc, otlp-http
+MODE = os.environ.get("MODE", "otlp-grpc")
 
-JAEGER_GRPC_ENDPOINT = os.environ.get("JAEGER_GRPC_ENDPOINT", "jaeger-collector:4317")
-JAEGER_HTTP_ENDPOINT = os.environ.get(
-    "JAEGER_HTTP_ENDPOINT", "http://jaeger-collector:4318/v1/traces"
-)
-OTEL_GRPC_ENDPOINT = os.environ.get("OTEL_GRPC_ENDPOINT", "otel-collector:4317")
-OTEL_HTTP_ENDPOINT = os.environ.get(
-    "OTEL_HTTP_ENDPOINT", "http://otel-collector:4318/v1/traces"
+OTLP_GRPC_ENDPOINT = os.environ.get("OTLP_GRPC_ENDPOINT", "jaeger-collector:4317")
+OTLP_HTTP_ENDPOINT = os.environ.get(
+    "OTLP_HTTP_ENDPOINT", "http://jaeger-collector:4318/v1/traces"
 )
 
 TARGET_ONE_HOST = os.environ.get("TARGET_ONE_HOST", "app-b")
@@ -43,40 +37,26 @@ TARGET_TWO_HOST = os.environ.get("TARGET_TWO_HOST", "app-c")
 app = FastAPI()
 
 
-def setting_jaeger(app: ASGIApp, app_name: str, log_correlation: bool = True) -> None:
-    # Setting jaeger
-    # set the service name to show in traces
-    resource = Resource.create(attributes={"service.name": app_name})
-
+def setting_jaeger(app: ASGIApp, log_correlation: bool = True) -> None:
     # set the tracer provider
-    tracer = TracerProvider(resource=resource)
+    tracer = TracerProvider()
     trace.set_tracer_provider(tracer)
 
-    if MODE == "jaeger-grpc":
+    if MODE == "otlp-grpc":
         tracer.add_span_processor(
             BatchSpanProcessor(
-                OTLPSpanExporterGRPC(endpoint=JAEGER_GRPC_ENDPOINT, insecure=True)
+                OTLPSpanExporterGRPC(endpoint=OTLP_GRPC_ENDPOINT, insecure=True)
             )
         )
-    elif MODE == "jaeger-http":
+    elif MODE == "otlp-http":
         tracer.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=JAEGER_HTTP_ENDPOINT))
-        )
-    elif MODE == "otel-collector-grpc":
-        tracer.add_span_processor(
-            BatchSpanProcessor(
-                OTLPSpanExporterGRPC(endpoint=OTEL_GRPC_ENDPOINT, insecure=True)
-            )
-        )
-    elif MODE == "otel-collector-http":
-        tracer.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=OTEL_HTTP_ENDPOINT))
+            BatchSpanProcessor(OTLPSpanExporterHTTP(endpoint=OTLP_HTTP_ENDPOINT))
         )
     else:
-        # default otel-collector-grpc
+        # default otlp-grpc
         tracer.add_span_processor(
             BatchSpanProcessor(
-                OTLPSpanExporterGRPC(endpoint=OTEL_GRPC_ENDPOINT, insecure=True)
+                OTLPSpanExporterGRPC(endpoint=OTLP_GRPC_ENDPOINT, insecure=True)
             )
         )
 
@@ -88,7 +68,7 @@ def setting_jaeger(app: ASGIApp, app_name: str, log_correlation: bool = True) ->
 
 
 # Setting jaeger exporter
-setting_jaeger(app, APP_NAME)
+setting_jaeger(app)
 
 
 @app.get("/")
@@ -140,7 +120,6 @@ async def error_test(response: Response):
 
 @app.get("/chain")
 async def chain(response: Response):
-
     headers = {}
     inject(headers)  # inject trace info to header
     logging.critical(headers)
