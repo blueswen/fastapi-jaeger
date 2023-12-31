@@ -25,6 +25,7 @@ Jaeger Agent has been deprecated since version 1.43. Since version 1.43, OpenTel
   - [Detail](#detail)
     - [FastAPI Application](#fastapi-application)
       - [Traces and Logs](#traces-and-logs)
+      - [Trace information](#trace-information)
       - [Span Inject](#span-inject)
     - [Jaeger](#jaeger)
       - [Jaeger Collector](#jaeger-collector)
@@ -129,6 +130,33 @@ def setting_jaeger(app: ASGIApp, log_correlation: bool = True) -> None:
         LoggingInstrumentor().instrument(set_logging_format=True)
 
     FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer)
+```
+
+#### Trace information
+
+The instrumentation library will collect trace information automatically, e.g. HTTP status code, HTTP method, HTTP URL, etc. We can also add custom attributes to the span with SDK.
+
+```py
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+
+resource = Resource.create(attributes={
+  "service.name": "fastapi-app",
+  "custom.data": "custom_data",
+})
+
+tracer = TracerProvider(resource=resource)
+```
+
+Or we can use environment variables to set the attributes and service name(the service name displayed on Jaeger UI), which is used in this demo. Following is the example of setting environment variables in the compose file.
+
+```yaml
+services:
+  app:
+    image: ghcr.io/blueswen/fastapi-jaeger/app:latest
+    environment:
+      OTEL_SERVICE_NAME: "fastapi-app"
+      OTEL_RESOURCE_ATTRIBUTES: "custom.data=custom_data"
 ```
 
 #### Span Inject
@@ -558,11 +586,31 @@ Receives spans from applications.
 2. Tags: key of tags or process level attributes from the trace, which will be log query criteria if the key exists in the trace
 3. Map tag names: Convert existing key of tags or process level attributes from trace to another key, then used as log query criteria. Use this feature when the values of the trace tag and log label are identical but the keys are different.
 
-Grafana data source setting example:
+In this demo, we use Loki Docker Driver to collect logs from applications. The Loki Docker Driver will add the following labels to the log: `container_name`, `compose_project`, `compose_service`, `source`, `filename`, and `host`. We have to map an attribute from the trace to a label of the log to query the log with the trace information. So we add a tag `compose_service` through environment variable `OTEL_RESOURCE_ATTRIBUTES` to the trace, then map the tag `compose_service` to the label `compose_service` of the log.
+
+```yaml
+# docker-compose-grafana.yaml
+
+services:
+  app-a:
+    image: ghcr.io/blueswen/fastapi-jaeger/app:latest
+    depends_on:
+      - loki
+    ports:
+      - "8000:8000"
+    logging: *default-logging
+    environment:
+      MODE: "otlp-grpc"
+      OTEL_SERVICE_NAME: "app-a"
+      OTLP_GRPC_ENDPOINT: "otel-collector:4317"
+      OTEL_RESOURCE_ATTRIBUTES: "compose_service=app-a"
+```
+
+The Jaeger data source setting in Grafana is as below:
 
 ![Data Source of Jaeger: Trace to logs](./images/jaeger-trace-to-logs.png)
 
-Grafana data sources config example:
+Which is produced by the following config file:
 
 ```yaml
 # etc/grafana/datasource.yml
