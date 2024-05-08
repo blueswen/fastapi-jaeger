@@ -57,7 +57,7 @@ services:
       TARGET_TWO_HOST: "app-c"
 
   jaeger-collector:
-    image: jaegertracing/jaeger-collector:1.52.0
+    image: jaegertracing/jaeger-collector:1.57.0
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -72,15 +72,15 @@ services:
       - cassandra-schema
 
   cassandra:
-    image: cassandra:4.1.2
+    image: cassandra:4.1.4
 
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema:1.52.0
+    image: jaegertracing/jaeger-cassandra-schema:1.57.0
     depends_on:
       - cassandra
 
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.52.0
+    image: jaegertracing/jaeger-query:1.57.0
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -92,7 +92,7 @@ services:
       - cassandra-schema
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.91.0
+    image: otel/opentelemetry-collector-contrib:0.100.0
     command:
       - "--config=/conf/config.yaml"
     volumes:

@@ -229,7 +229,7 @@ The Jaeger collector receives traces from OpenTelemetry SDKs or OpenTelemetry Ag
 # docker-compose.yaml
 services:
   jaeger-collector:
-    image: jaegertracing/jaeger-collector:1.52.0
+    image: jaegertracing/jaeger-collector:1.57.0
     command: 
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -256,7 +256,7 @@ The OpenTelemetry Collector receives traces from OpenTelemetry SDKs and processe
 # docker-compose.yaml
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.91.0
+    image: otel/opentelemetry-collector-contrib:0.100.0
     command:
       - "--config=/conf/config.yaml"
     volumes:
@@ -318,11 +318,11 @@ In this demo, we use Cassandra as the storage backend.
 services:
   # Cassandra instance container
   cassandra:
-    image: cassandra:4.1.2
+    image: cassandra:4.1.4
 
   # initialize Cassandra
   cassandra-schema:
-    image: jaegertracing/jaeger-cassandra-schema:1.52.0
+    image: jaegertracing/jaeger-cassandra-schema:1.57.0
     depends_on:
       - cassandra
 ```
@@ -345,7 +345,7 @@ The Jaeger Query is a service that retrieves traces from storage and hosts a UI 
 # docker-compose.yaml
 services:
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.52.0
+    image: jaegertracing/jaeger-query:1.57.0
     command:
       - "--cassandra.keyspace=jaeger_v1_dc1"
       - "--cassandra.servers=cassandra"
@@ -470,7 +470,7 @@ Prometheus collects metrics from OpenTelemetry Collector and stores them in its 
 # docker-compose-spm.yaml
 service:
   prometheus:
-    image: prom/prometheus:v2.48.1
+    image: prom/prometheus:v2.51.2
     ports:
       - "9090:9090"
     volumes:
@@ -500,7 +500,7 @@ Jaeger Query scrapes metrics from Prometheus and displays them on the Monitoring
 # docker-compose-spm.yaml
 service:
   jaeger-query:
-    image: jaegertracing/jaeger-query:1.52.0
+    image: jaegertracing/jaeger-query:1.57.0
     environment:
       - METRICS_STORAGE_TYPE=prometheus
     command:
@@ -709,7 +709,7 @@ editable: true
 # grafana in docker-compose-grafana.yaml
 service:
   grafana:
-    image: grafana/grafana:10.2.3
+    image: grafana/grafana:10.4.2
     ports:
       - "3000:3000"
     volumes:
