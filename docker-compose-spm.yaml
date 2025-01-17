@@ -65,10 +65,6 @@ services:
       - "--collector.otlp.enabled=true"
     environment: 
       - SAMPLING_CONFIG_TYPE=adaptive
-    ports:
-      - "4317" # accept OpenTelemetry Protocol (OTLP) over gRPC
-      - "4318" # accept OpenTelemetry Protocol (OTLP) over HTTP
-      - "14250" # accept model.proto
     restart: on-failure
     depends_on:
       - cassandra-schema
@@ -106,9 +102,9 @@ services:
     volumes:
       - ./etc/otel-collector-config-spm.yaml:/conf/config.yaml
     ports:
-      - "4317" # OTLP gRPC receiver
-      - "4318" # OTLP http receiver
-      - "8889" # Prometheus metrics exporter
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP http receiver
+      - "8889:8889" # Prometheus metrics exporter
     restart: on-failure
     depends_on:
       - jaeger-collector
